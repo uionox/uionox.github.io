@@ -110,6 +110,32 @@ export function OsIcon({ kind = "program", size = 32 }) {
           <div style="position:absolute;left:8px;top:14px;width:12px;height:4px;background:#fff;border-radius:1px;"></div>
           <div style="position:absolute;left:18px;top:11px;width:0;height:0;border-top:5px solid transparent;border-bottom:5px solid transparent;border-left:7px solid #fff;"></div>
         `}
+        ${kind === "sudoku" && html`
+          <div style="position:absolute;inset:2px;background:#fff;border:1px solid #8f98a8;border-radius:2px;box-shadow:1px 1px 2px rgba(20,40,80,0.2);"></div>
+          <svg width="32" height="32" viewBox="0 0 32 32" style="position:absolute;left:0;top:0;">
+            <rect x="5" y="5" width="22" height="22" rx="1" fill="none" stroke="#123f7a" stroke-width="1.6"/>
+            <line x1="12.33" y1="5" x2="12.33" y2="27" stroke="#123f7a" stroke-width="1"/>
+            <line x1="19.67" y1="5" x2="19.67" y2="27" stroke="#123f7a" stroke-width="1"/>
+            <line x1="5" y1="12.33" x2="27" y2="12.33" stroke="#123f7a" stroke-width="1"/>
+            <line x1="5" y1="19.67" x2="27" y2="19.67" stroke="#123f7a" stroke-width="1"/>
+            <rect x="12.33" y="5" width="7.34" height="7.33" fill="#eaf1fd"/>
+            <rect x="5" y="19.67" width="7.33" height="7.33" fill="#eaf1fd"/>
+            <rect x="19.67" y="12.33" width="7.33" height="7.34" fill="#eaf1fd"/>
+          </svg>
+        `}
+        ${kind === "mute" && html`
+          <svg width="32" height="32" viewBox="0 0 24 24" style="position:absolute;left:0;top:0;">
+            <path d="M4 9v6h4l5 4V5L8 9H4z" fill="#fff"/>
+            <path d="M16 9l5 6M21 9l-5 6" stroke="#ff6b52" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        `}
+        ${kind === "unmute" && html`
+          <svg width="32" height="32" viewBox="0 0 24 24" style="position:absolute;left:0;top:0;">
+            <path d="M4 9v6h4l5 4V5L8 9H4z" fill="#fff"/>
+            <path d="M15.8 8.6a4 4 0 0 1 0 6.8" stroke="#fff" stroke-width="1.7" fill="none" stroke-linecap="round"/>
+            <path d="M18.4 6a7 7 0 0 1 0 12" stroke="#fff" stroke-width="1.7" fill="none" stroke-linecap="round" opacity="0.72"/>
+          </svg>
+        `}
       </div>
     </div>
   `;

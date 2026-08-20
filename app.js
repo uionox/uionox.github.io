@@ -1,6 +1,8 @@
 import { h, render, Component, createRef } from "./vendor/preact.module.js";
 import htm from "./vendor/htm.module.js";
 import { OsIcon } from "./osicon.js";
+import { sfx, isMuted, toggleMuted } from "./sound.js";
+import { generate as generateSudoku } from "./sudoku.js";
 
 const html = htm.bind(h);
 
@@ -141,14 +143,17 @@ const APPS = {
   bin:      { title: "Recycle Bin", w: 420, h: 300, kind: "bin" },
   snake:    { title: "Snake", w: 380, h: 440, kind: "snake" },
   mine:     { title: "Minesweeper", w: 300, h: 360, kind: "mine" },
+  sudoku:   { title: "Sudoku", w: 360, h: 560, kind: "sudoku" },
   contact:  { title: "Contact", w: 460, h: 340, kind: "contact" },
   display:  { title: "Display Properties", w: 400, h: 500, kind: "display" }
 };
 
 const GRID = 20, CELL = 16;
 const SNAKE_SPEED = 115;
+const SUD = 30;
 const WALL_KEY = "uionox_wallpaper";
 const BOOT_KEY = "uionox_booted";
+const SUDOKU_BEST_KEY = "uionox_sudoku_best";
 
 /* ============================== app ============================== */
 
@@ -166,6 +171,8 @@ class App extends Component {
     termLines: [], termInput: "", termHist: [], termHistIdx: -1,
     snake: null, snakeBest: 0, snakeMsg: "Snake", snakeBtn: "Start",
     mine: null, mineTime: 0, mineFace: ":)", mineStatus: "Left-click reveals · right-click flags",
+    sudoku: null, sudokuTimer: 0, sudokuBest: {}, sudokuNotesMode: false,
+    muted: isMuted(),
     mobile: false
   };
 
@@ -185,16 +192,23 @@ class App extends Component {
       if (savedWall) this.setState({ wall: savedWall });
     } catch (e) {}
 
+    try {
+      const savedBest = JSON.parse(localStorage.getItem(SUDOKU_BEST_KEY) || "{}");
+      this.setState({ sudokuBest: savedBest });
+    } catch (e) {}
+
     this.setState({ clock: this.timeNow() });
     this.tick = setInterval(() => {
       this.setState({ clock: this.timeNow() });
       if (this.state.mine && this.state.mine.started && !this.state.mine.over) this.setState(s => ({ mineTime: s.mineTime + 1 }));
+      if (this.state.sudoku && !this.state.sudoku.won) this.setState(s => ({ sudokuTimer: s.sudokuTimer + 1 }));
     }, 1000);
 
     let booted = false;
     try { booted = sessionStorage.getItem(BOOT_KEY) === "1"; } catch (e) {}
     if (booted) { this.setState({ booting: false }); }
     else {
+      sfx.boot();
       const lines = ["Detecting hardware…", "Loading UIONOX kernel…", "Mounting C:\\PROJECTS…", "Starting desktop shell…"];
       let i = 0;
       this.bootT = setInterval(() => { i++; if (i < lines.length) this.setState({ bootLine: lines[i] }); }, 800);
@@ -205,6 +219,11 @@ class App extends Component {
       if (this.state.booting) { this.skipBoot(); return; }
       if (this.snakeAlive() && ["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","w","a","s","d","W","A","S","D"].indexOf(e.key) >= 0) {
         e.preventDefault(); this.turn(e.key);
+      }
+      const sd = this.state.sudoku;
+      if (sd && sd.selected && document.activeElement && document.activeElement.tagName !== "INPUT") {
+        if (e.key >= "1" && e.key <= "9") { this.sudokuInput(Number(e.key)); }
+        else if (e.key === "Backspace" || e.key === "Delete" || e.key === "0") { this.sudokuInput(0); }
       }
       if (e.key === "Escape") this.setState({ startOpen: false, ctx: null });
     };
@@ -237,6 +256,8 @@ class App extends Component {
     try { sessionStorage.setItem(BOOT_KEY, "1"); } catch (e) {}
     this.setState({ booting: false });
   };
+
+  toggleMute = () => this.setState({ muted: toggleMuted() });
 
   /* ---------- wallpaper ---------- */
   pickWall = () => this.wallInputRef.current && this.wallInputRef.current.click();
@@ -281,6 +302,7 @@ class App extends Component {
     if (app === "term" && !this.state.termLines.length) this.bootTerm();
     if (app === "snake") this.resetSnake();
     if (app === "mine") this.resetMine();
+    if (app === "sudoku") this.setState({ sudoku: null });
     if (extra.project) setTimeout(() => this.setState(s => ({ windows: s.windows.map(w2 => w2.id === id ? { ...w2, loading: false } : w2), busy: false })), 950);
     if (app === "term") setTimeout(() => this.termRef.current && this.termRef.current.focus(), 60);
   };
@@ -407,7 +429,7 @@ class App extends Component {
           "  projects     open the projects folder", "  cv           open the CV explorer",
           "  contact      how to reach me", "  motto        the whole point",
           "  date         today, allegedly", "  echo <text>  say it back",
-          "  snake        play snake", "  mines        play minesweeper",
+          "  snake        play snake", "  mines        play minesweeper", "  sudoku       play sudoku",
           "  clear        wipe the screen", "  exit         close this window", "",
           "There are a few undocumented ones. You'll find them.");
         break;
@@ -432,7 +454,8 @@ class App extends Component {
           " 20/08/2026  10:58             1,208 contact.txt",
           " 20/08/2026  10:58            13,370 snake.exe",
           " 20/08/2026  10:58             9,001 mines.exe",
-          "               4 File(s)         27,675 bytes");
+          " 20/08/2026  10:58            11,412 sudoku.exe",
+          "               5 File(s)         39,087 bytes");
         break;
       case head === "cat" || head === "type":
         if (arg.indexOf("manifesto") >= 0) { this.open("note"); out.push("Opening manifesto.txt in Notepad…"); }
@@ -454,6 +477,7 @@ class App extends Component {
       case head === "echo": out.push(cmd.slice(5) || ""); break;
       case lc === "snake" || lc === "play snake": this.open("snake"); out.push("Launching snake.exe…"); break;
       case head === "mines" || head === "minesweeper": this.open("mine"); out.push("Launching mines.exe…"); break;
+      case head === "sudoku": this.open("sudoku"); out.push("Launching sudoku.exe…"); break;
       case head === "clear" || head === "cls": this.setState({ termLines: [] }); return;
       case head === "exit": this.close("term"); return;
       /* easter eggs */
@@ -529,12 +553,15 @@ class App extends Component {
       const head = { x: sn.body[0].x + dir.x, y: sn.body[0].y + dir.y };
       if (head.x < 0 || head.y < 0 || head.x >= GRID || head.y >= GRID || sn.body.some(b => b.x === head.x && b.y === head.y)) {
         clearInterval(this.snakeT);
-        return { snake: { ...sn, running: false, dead: true }, snakeMsg: "Game over — " + sn.score, snakeBtn: "Play again", snakeBest: Math.max(s.snakeBest, sn.score) };
+        const best = Math.max(s.snakeBest, sn.score);
+        if (sn.score > 0 && sn.score >= best) sfx.win(); else sfx.gameOver();
+        return { snake: { ...sn, running: false, dead: true }, snakeMsg: "Game over — " + sn.score, snakeBtn: "Play again", snakeBest: best };
       }
       const body = [head, ...sn.body];
       let food = sn.food, score = sn.score;
       if (head.x === food.x && head.y === food.y) {
         score += 1;
+        sfx.eat();
         do { food = { x: Math.floor(Math.random() * GRID), y: Math.floor(Math.random() * GRID) }; } while (body.some(b => b.x === food.x && b.y === food.y));
       } else body.pop();
       return { snake: { ...sn, body, dir, food, score } };
@@ -587,11 +614,13 @@ class App extends Component {
       if (!started) { this.plant(cells, i); started = true; }
       if (cells[i].mine) {
         cells.forEach(c => { if (c.mine) c.open = true; });
+        sfx.boom();
         return { mine: { ...m, cells, started, over: true }, mineFace: "x(", mineStatus: "Boom. Click the face to try again." };
       }
       this.flood(cells, i);
       const safe = cells.filter(c => !c.mine && c.open).length;
-      if (safe === 71) return { mine: { ...m, cells, started, over: true, won: true }, mineFace: "B)", mineStatus: "Cleared. Nine by nine, ten mines, no luck involved. Probably." };
+      if (safe === 71) { sfx.win(); return { mine: { ...m, cells, started, over: true, won: true }, mineFace: "B)", mineStatus: "Cleared. Nine by nine, ten mines, no luck involved. Probably." }; }
+      sfx.click();
       return { mine: { ...m, cells, started }, mineStatus: "Left-click reveals · right-click flags" };
     });
   };
@@ -600,7 +629,56 @@ class App extends Component {
     this.setState(s => {
       const m = s.mine; if (!m || m.over || m.cells[i].open) return {};
       const cells = m.cells.map((c, k) => k === i ? { ...c, flag: !c.flag } : c);
+      sfx.flag();
       return { mine: { ...m, cells } };
+    });
+  };
+
+  /* ---------- sudoku ---------- */
+  resetSudoku = () => this.setState({ sudoku: null });
+  startSudoku = (level) => {
+    const { puzzle, solution } = generateSudoku(level);
+    const given = puzzle.map(row => row.map(v => v !== 0));
+    const notes = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => new Set()));
+    this.setState({
+      sudoku: { level, grid: puzzle.map(r => r.slice()), solution, given, notes, selected: null, mistakes: 0, won: false },
+      sudokuTimer: 0
+    });
+  };
+  sudokuSelect = (r, c) => this.setState(s => ({ sudoku: { ...s.sudoku, selected: { r, c } } }));
+  toggleSudokuNotes = () => this.setState(s => ({ sudokuNotesMode: !s.sudokuNotesMode }));
+  sudokuInput = (v) => {
+    this.setState(s => {
+      const sd = s.sudoku;
+      if (!sd || sd.won || !sd.selected) return {};
+      const { r, c } = sd.selected;
+      if (sd.given[r][c]) return {};
+
+      if (s.sudokuNotesMode && v !== 0) {
+        const notes = sd.notes.map(row => row.map(set => new Set(set)));
+        if (notes[r][c].has(v)) notes[r][c].delete(v); else notes[r][c].add(v);
+        sfx.click();
+        return { sudoku: { ...sd, notes } };
+      }
+
+      const grid = sd.grid.map(row => row.slice());
+      grid[r][c] = v;
+      const notes = sd.notes.map(row => row.map(set => new Set(set)));
+      notes[r][c].clear();
+      let mistakes = sd.mistakes;
+      if (v !== 0 && v !== sd.solution[r][c]) { mistakes++; sfx.error(); }
+      else if (v !== 0) sfx.place();
+      const won = grid.every((row, ri) => row.every((val, ci) => val === sd.solution[ri][ci]));
+      if (won) {
+        sfx.win();
+        const best = { ...s.sudokuBest };
+        if (!best[sd.level] || s.sudokuTimer < best[sd.level]) {
+          best[sd.level] = s.sudokuTimer;
+          try { localStorage.setItem(SUDOKU_BEST_KEY, JSON.stringify(best)); } catch (e) {}
+        }
+        return { sudoku: { ...sd, grid, notes, mistakes, won }, sudokuBest: best };
+      }
+      return { sudoku: { ...sd, grid, notes, mistakes } };
     });
   };
 
@@ -610,6 +688,7 @@ class App extends Component {
     setTimeout(() => this.setState({ shutDone: true }), 2200);
   };
   reboot = () => this.setState({ shuttingDown: false, shutDone: false, windows: [], booting: true, bootLine: "Restarting UIONOX OS…" }, () => {
+    sfx.boot();
     clearTimeout(this.bootEnd); this.bootEnd = setTimeout(() => this.skipBoot(), 1800);
   });
 
@@ -681,7 +760,7 @@ class App extends Component {
         resizable: !maxed,
         isBrowser: w.kind === "browser", isMyPC: w.kind === "mypc", isFolder: w.kind === "folder",
         isNote: w.kind === "note", isTerm: w.kind === "term", isSnake: w.kind === "snake",
-        isMine: w.kind === "mine", isBin: w.kind === "bin", isContact: w.kind === "contact", isShot: w.kind === "shot", isDisplay: w.kind === "display",
+        isMine: w.kind === "mine", isSudoku: w.kind === "sudoku", isBin: w.kind === "bin", isContact: w.kind === "contact", isShot: w.kind === "shot", isDisplay: w.kind === "display",
         previewStyle: st.wall
           ? { width: "100%", height: "100%", backgroundImage: "url(" + st.wall + ")", backgroundSize: "cover", backgroundPosition: "center" }
           : { width: "100%", height: "100%", background: "linear-gradient(180deg,#1560b8 0%,#3f97e2 34%,#9dd2f2 58%,#e9f2f4 70%,#6fb122 71%,#2f6609 100%)" },
@@ -739,7 +818,8 @@ class App extends Component {
     const startRecent = [
       { label: "Notepad", sub: "manifesto.txt", kind: "note", act: () => this.open("note") },
       { label: "Snake", sub: "Arrow keys. Obviously.", kind: "snake", act: () => this.open("snake") },
-      { label: "Minesweeper", sub: "Nine by nine, ten mines", kind: "mine", act: () => this.open("mine") }
+      { label: "Minesweeper", sub: "Nine by nine, ten mines", kind: "mine", act: () => this.open("mine") },
+      { label: "Sudoku", sub: "Three difficulties, zero hints", kind: "sudoku", act: () => this.open("sudoku") }
     ].map(i => ({ ...i, style: itemStyle(), onClick: i.act }));
 
     const startRight = [
@@ -753,11 +833,30 @@ class App extends Component {
     const sn = st.snake;
     const snakeParts = [];
     if (sn) {
+      const dirKey = sn.dir.x === 1 ? "r" : sn.dir.x === -1 ? "l" : sn.dir.y === 1 ? "d" : "u";
+      const eyes = { r: [[CELL - 6, 3], [CELL - 6, CELL - 5]], l: [[3, 3], [3, CELL - 5]], u: [[3, 3], [CELL - 6, 3]], d: [[3, CELL - 5], [CELL - 6, CELL - 5]] }[dirKey];
       sn.body.forEach((b, i) => snakeParts.push({
-        style: { position: "absolute", left: b.x * CELL + "px", top: b.y * CELL + "px", width: CELL + "px", height: CELL + "px", borderRadius: i === 0 ? "4px" : "2px", background: i === 0 ? "#c9f58a" : "#7ec13f", boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.18)" }
+        style: { position: "absolute", left: b.x * CELL + 1 + "px", top: b.y * CELL + 1 + "px", width: CELL - 2 + "px", height: CELL - 2 + "px", background: i === 0 ? "#d7f0a0" : "#4aa62f" }
       }));
-      snakeParts.push({ style: { position: "absolute", left: sn.food.x * CELL + 3 + "px", top: sn.food.y * CELL + 3 + "px", width: CELL - 6 + "px", height: CELL - 6 + "px", borderRadius: "50%", background: "#ff5a3c", boxShadow: "0 0 6px rgba(255,90,60,0.8)" } });
+      const head = sn.body[0];
+      eyes.forEach(([ex, ey]) => snakeParts.push({ style: { position: "absolute", left: head.x * CELL + ex + "px", top: head.y * CELL + ey + "px", width: "2px", height: "2px", background: "#182b0f" } }));
+      snakeParts.push({ style: { position: "absolute", left: sn.food.x * CELL + 3 + "px", top: sn.food.y * CELL + 3 + "px", width: CELL - 6 + "px", height: CELL - 6 + "px", background: "#e2402c" } });
+      snakeParts.push({ style: { position: "absolute", left: sn.food.x * CELL + CELL - 6 + "px", top: sn.food.y * CELL + 1 + "px", width: "3px", height: "3px", background: "#5fae2f" } });
     }
+    const dpadBtn = (area) => ({
+      gridArea: area, display: "flex", alignItems: "center", justifyContent: "center",
+      width: "52px", height: "52px", cursor: "default", userSelect: "none",
+      borderRadius: "10px", border: "1px solid #7f97c2",
+      background: "linear-gradient(180deg,#fdfdfa,#e4e9f2 55%,#c3cee2)",
+      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.7), 0 3px 6px rgba(20,40,80,0.28)"
+    });
+    const chevron = (deg) => html`<svg width="24" height="24" viewBox="0 0 24 24" style="transform:rotate(${deg}deg);display:block;"><path d="M6.5 15.5 L12 8.5 L17.5 15.5" fill="none" stroke="#1b3f7d" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    const dpad = [
+      { dir: "ArrowUp", icon: chevron(0), style: dpadBtn("up") },
+      { dir: "ArrowLeft", icon: chevron(270), style: dpadBtn("left") },
+      { dir: "ArrowDown", icon: chevron(180), style: dpadBtn("down") },
+      { dir: "ArrowRight", icon: chevron(90), style: dpadBtn("right") }
+    ].map(b => ({ ...b, onClick: () => this.turn(b.dir) }));
 
     const m = st.mine;
     const numColors = ["", "#1a3fd4", "#1a7a1a", "#c31414", "#0d1a7a", "#7a1414", "#0d6f6f", "#000", "#666"];
@@ -778,6 +877,35 @@ class App extends Component {
     })) : [];
 
     const flags = m ? m.cells.filter(c => c.flag).length : 0;
+
+    const fmtTime = (s) => String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+
+    const sd = st.sudoku;
+    const sudokuCells = sd ? sd.grid.flatMap((row, r) => row.map((v, c) => {
+      const sel = sd.selected && sd.selected.r === r && sd.selected.c === c;
+      const given = sd.given[r][c];
+      const wrong = v !== 0 && v !== sd.solution[r][c];
+      const notes = (!given && !v) ? Array.from({ length: 9 }, (_, i) => sd.notes[r][c].has(i + 1) ? i + 1 : "") : [];
+      return {
+        r, c, value: v || "", notes,
+        style: {
+          display: "flex", alignItems: "center", justifyContent: "center", position: "relative",
+          width: SUD + "px", height: SUD + "px", cursor: "default",
+          fontFamily: "Tahoma,sans-serif", fontSize: "15px", fontWeight: given ? 700 : 400,
+          color: given ? "#12233c" : (wrong ? "#c31414" : "#1a4fbb"),
+          background: sel ? "#cfe0fb" : "#fff",
+          borderTop: "1px solid " + (r % 3 === 0 ? "#33405a" : "#c7cddc"),
+          borderLeft: "1px solid " + (c % 3 === 0 ? "#33405a" : "#c7cddc"),
+          borderRight: c === 8 ? "1px solid #33405a" : "none",
+          borderBottom: r === 8 ? "1px solid #33405a" : "none"
+        },
+        onClick: () => this.sudokuSelect(r, c)
+      };
+    })) : [];
+    const sudokuPad = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => ({ n, onClick: () => this.sudokuInput(n) }));
+    const sudokuLevels = [["easy", "Easy"], ["medium", "Medium"], ["hard", "Hard"]].map(([key, label]) => ({
+      key, label, best: st.sudokuBest[key] ? fmtTime(st.sudokuBest[key]) : "—", onClick: () => this.startSudoku(key)
+    }));
 
     const contactRows = [
       { k: "Email", v: "hussein.moussa@uionox.com" },
@@ -1034,25 +1162,32 @@ class App extends Component {
               `}
 
               ${win.isSnake && html`
-                <div style="flex:1;min-height:0;display:flex;flex-direction:column;background:#e9e7dc;padding:10px;gap:8px;align-items:center;">
-                  <div style="display:flex;justify-content:space-between;width:100%;max-width:340px;font-size:12px;color:#33404f;">
-                    <div>Score: <b>${sn ? sn.score : 0}</b></div><div>Best: <b>${st.snakeBest}</b></div>
+                <div style="flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;background:#e9e7dc;padding:10px;gap:10px;align-items:center;">
+                  <div style="display:flex;align-items:center;justify-content:center;gap:16px;padding:6px 14px;background:#c0c0c0;border-top:2px solid #fff;border-left:2px solid #fff;border-right:2px solid #808080;border-bottom:2px solid #808080;">
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+                      <div style="font-size:9px;letter-spacing:0.1em;color:#4a4a44;font-family:Tahoma,Verdana,sans-serif;font-weight:700;">SCORE</div>
+                      <div style="background:#000;color:#f33;font-family:'VT323',monospace;font-size:24px;line-height:1;padding:2px 10px;min-width:56px;text-align:center;">${sn ? sn.score : 0}</div>
+                    </div>
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+                      <div style="font-size:9px;letter-spacing:0.1em;color:#4a4a44;font-family:Tahoma,Verdana,sans-serif;font-weight:700;">BEST</div>
+                      <div style="background:#000;color:#f33;font-family:'VT323',monospace;font-size:24px;line-height:1;padding:2px 10px;min-width:56px;text-align:center;">${st.snakeBest}</div>
+                    </div>
                   </div>
-                  <div style="position:relative;width:${GRID * CELL}px;height:${GRID * CELL}px;background:#152018;border:3px solid #6e7a6a;box-shadow:inset 0 0 22px rgba(0,0,0,0.6);flex:none;" onTouchStart=${(e) => { const t = e.touches[0]; this._sw = { x: t.clientX, y: t.clientY }; }} onTouchEnd=${(e) => {
-                      if (!this._sw || !e.changedTouches) return;
-                      const t = e.changedTouches[0], dx = t.clientX - this._sw.x, dy = t.clientY - this._sw.y;
-                      if (Math.abs(dx) < 18 && Math.abs(dy) < 18) return;
-                      this.turn(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "ArrowRight" : "ArrowLeft") : (dy > 0 ? "ArrowDown" : "ArrowUp"));
-                    }}>
+                  <div style="position:relative;width:${GRID * CELL}px;height:${GRID * CELL}px;background:#132018;border:3px solid #57614f;flex:none;">
                     ${snakeParts.map(p => html`<div style=${p.style}></div>`)}
                     ${!(sn && sn.running) && html`
                       <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:rgba(10,20,14,0.82);color:#dfeede;text-align:center;padding:16px;">
                         <div style="font-size:15px;font-weight:700;">${st.snakeMsg}</div>
-                        <div style="font-size:11px;opacity:0.75;line-height:1.6;">Arrow keys or WASD to steer.<br/>Swipe on touch.</div>
+                        <div style="font-size:11px;opacity:0.75;line-height:1.6;">Arrow keys or WASD${mob ? "" : ", or the pad below,"} to steer.</div>
                         <div class="hv-bright11" style="padding:6px 16px;border-radius:4px;border:1px solid #7fae5a;background:linear-gradient(180deg,#9ed46d,#4f8a25);color:#fff;font-weight:700;cursor:default;" onClick=${this.startSnake}>${st.snakeBtn}</div>
                       </div>
                     `}
                   </div>
+                  ${mob && html`
+                    <div style="display:grid;grid-template-columns:52px 52px 52px;grid-template-rows:52px 52px 52px;grid-template-areas:'. up .' 'left . right' '. down .';gap:8px;margin-top:2px;flex:none;">
+                      ${dpad.map(b => html`<div class="hv-bright11" style=${b.style} onClick=${b.onClick}>${b.icon}</div>`)}
+                    </div>
+                  `}
                   <div style="font-size:11px;color:#5d6675;">A snake game. It is exactly as deep as it looks.</div>
                 </div>
               `}
@@ -1068,6 +1203,74 @@ class App extends Component {
                     ${mineCells.map(c => html`<div style=${c.style} onClick=${c.onClick} onContextMenu=${c.onFlag}>${c.label}</div>`)}
                   </div>
                   <div style="font-size:11px;color:#4a4a44;">${st.mineStatus}</div>
+                </div>
+              `}
+
+              ${win.isSudoku && html`
+                <div style="flex:1;min-height:0;overflow:auto;background:#e9e7dc;padding:10px;display:flex;flex-direction:column;align-items:center;gap:10px;">
+                  <div style="display:flex;align-items:center;justify-content:center;gap:14px;padding:6px 14px;background:#c0c0c0;border-top:2px solid #fff;border-left:2px solid #fff;border-right:2px solid #808080;border-bottom:2px solid #808080;">
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+                      <div style="font-size:9px;letter-spacing:0.1em;color:#4a4a44;font-family:Tahoma,Verdana,sans-serif;font-weight:700;">LEVEL</div>
+                      <div style="padding:3px 10px;border-radius:2px;background:linear-gradient(180deg,#4a8ceb,#1c4fb6);color:#fff;font-family:Tahoma,Verdana,sans-serif;font-size:12px;font-weight:700;min-width:38px;text-align:center;">${sd ? sd.level[0].toUpperCase() + sd.level.slice(1) : "—"}</div>
+                    </div>
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+                      <div style="font-size:9px;letter-spacing:0.1em;color:#4a4a44;font-family:Tahoma,Verdana,sans-serif;font-weight:700;">TIME</div>
+                      <div style="background:#000;color:#f33;font-family:'VT323',monospace;font-size:22px;line-height:1;padding:2px 10px;min-width:64px;text-align:center;">${fmtTime(st.sudokuTimer)}</div>
+                    </div>
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+                      <div style="font-size:9px;letter-spacing:0.1em;color:#4a4a44;font-family:Tahoma,Verdana,sans-serif;font-weight:700;">MISTAKES</div>
+                      <div style="background:#000;color:#f33;font-family:'VT323',monospace;font-size:22px;line-height:1;padding:2px 10px;min-width:44px;text-align:center;">${sd ? sd.mistakes : 0}</div>
+                    </div>
+                  </div>
+                  <div style="position:relative;display:grid;grid-template-columns:repeat(9,${SUD}px);grid-template-rows:repeat(9,${SUD}px);width:${SUD * 9}px;height:${SUD * 9}px;background:#fff;border:2px solid #33405a;flex:none;">
+                    ${sudokuCells.map(cell => html`
+                      <div style=${cell.style} onClick=${cell.onClick}>
+                        ${cell.value !== "" ? cell.value : (cell.notes.some(n => n !== "") && html`
+                          <div style="position:absolute;inset:2px;display:grid;grid-template-columns:repeat(3,1fr);align-items:center;justify-items:center;font-size:7px;color:#5a6b8a;font-weight:400;">
+                            ${cell.notes.map(n => html`<div>${n}</div>`)}
+                          </div>
+                        `)}
+                      </div>
+                    `)}
+                    ${!sd && html`
+                      <div style="position:absolute;inset:10px;border-radius:6px;background:linear-gradient(180deg,#fdfdfa,#eceadd);border:1px solid #b9b49f;box-shadow:0 10px 30px rgba(10,20,40,0.35);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px;">
+                        <div style="display:flex;align-items:center;gap:8px;">
+                          <${OsIcon} kind="sudoku" size=${26} />
+                          <div style="font-size:16px;font-weight:700;color:#16283f;font-family:Tahoma,Verdana,sans-serif;">Sudoku</div>
+                        </div>
+                        <div style="font-size:10.5px;color:#5d6675;letter-spacing:0.04em;margin-top:-8px;">Choose a difficulty</div>
+                        <div style="display:flex;flex-direction:column;gap:8px;width:100%;max-width:210px;">
+                          ${sudokuLevels.map(lv => html`
+                            <div class="hv-bright11" style="display:flex;align-items:center;justify-content:space-between;padding:9px 14px;border-radius:5px;border:1px solid #7f97c2;background:linear-gradient(180deg,#fdfdfa,#e4e9f2 55%,#c3cee2);box-shadow:inset 0 1px 0 rgba(255,255,255,0.7),0 2px 4px rgba(20,40,80,0.18);cursor:default;" onClick=${lv.onClick}>
+                              <span style="font-weight:700;font-size:13px;color:#12233c;font-family:Tahoma,Verdana,sans-serif;">${lv.label}</span>
+                              <span style="background:#000;color:#f33;font-family:'VT323',monospace;font-size:14px;padding:1px 8px;border-radius:2px;min-width:44px;text-align:center;">${lv.best}</span>
+                            </div>
+                          `)}
+                        </div>
+                      </div>
+                    `}
+                    ${sd && sd.won && html`
+                      <div style="position:absolute;inset:10px;border-radius:6px;background:linear-gradient(180deg,#fdfdfa,#eceadd);border:1px solid #b9b49f;box-shadow:0 10px 30px rgba(10,20,40,0.35);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px;text-align:center;">
+                        <svg width="34" height="34" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.5" fill="none" stroke="#4f8a25" stroke-width="1.6"/><path d="M7 12.5 L10.3 16 L17 8.5" fill="none" stroke="#4f8a25" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        <div style="font-size:15px;font-weight:700;color:#16283f;font-family:Tahoma,Verdana,sans-serif;">Solved — ${fmtTime(st.sudokuTimer)}</div>
+                        <div class="hv-bright11" style="padding:7px 18px;border-radius:5px;border:1px solid #7fae5a;background:linear-gradient(180deg,#9ed46d,#4f8a25);color:#fff;font-weight:700;font-family:Tahoma,Verdana,sans-serif;cursor:default;" onClick=${this.resetSudoku}>Play again</div>
+                      </div>
+                    `}
+                  </div>
+                  ${sd && !sd.won && html`
+                    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;width:100%;max-width:${SUD * 9}px;">
+                      ${sudokuPad.map(p => html`
+                        <div class="hv-bright11" style="display:flex;align-items:center;justify-content:center;height:36px;border-radius:5px;border:1px solid #7f97c2;background:linear-gradient(180deg,#fdfdfa,#e4e9f2 55%,#c3cee2);box-shadow:inset 0 1px 0 rgba(255,255,255,0.7),0 2px 3px rgba(20,40,80,0.16);font-size:15px;font-weight:700;color:#1a3fd4;font-family:Tahoma,Verdana,sans-serif;cursor:default;" onClick=${p.onClick}>${p.n}</div>
+                      `)}
+                      <div class="hv-bright11" style="display:flex;align-items:center;justify-content:center;height:36px;border-radius:5px;border:1px solid #c79a9a;background:linear-gradient(180deg,#fdfdfa,#f2e4e4 55%,#e2c3c3);box-shadow:inset 0 1px 0 rgba(255,255,255,0.7),0 2px 3px rgba(20,40,80,0.16);font-size:12px;font-weight:700;color:#7a1414;font-family:Tahoma,Verdana,sans-serif;cursor:default;" onClick=${() => this.sudokuInput(0)}>Erase</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:9px;cursor:default;" onClick=${this.toggleSudokuNotes}>
+                      <div style="width:36px;height:19px;border-radius:10px;background:${st.sudokuNotesMode ? "linear-gradient(180deg,#4a8ceb,#1c4fb6)" : "#b9c2d6"};position:relative;box-shadow:inset 0 1px 3px rgba(0,0,0,0.25);flex:none;">
+                        <div style="position:absolute;top:2px;left:${st.sudokuNotesMode ? "19px" : "2px"};width:15px;height:15px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,0.35);"></div>
+                      </div>
+                      <div style="font-size:11.5px;font-weight:700;color:#33405a;font-family:Tahoma,Verdana,sans-serif;">Notes${st.sudokuNotesMode ? " on" : ""}</div>
+                    </div>
+                  `}
                 </div>
               `}
 
@@ -1162,6 +1365,9 @@ class App extends Component {
             `)}
           </div>
           <div style="display:flex;align-items:center;gap:9px;padding:0 13px 0 12px;flex:none;background:linear-gradient(180deg,#18a3e0 0%,#22b0ea 6%,#118cd0 44%,#0f79bd 82%,#0a5f9f 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,0.5),inset 3px 0 6px rgba(0,20,60,0.28);color:#fff;text-shadow:0 1px 1px rgba(0,0,0,0.4);">
+            <div class="hv-white-20" style="display:flex;padding:3px;border-radius:3px;cursor:default;" onClick=${this.toggleMute}>
+              <${OsIcon} kind=${st.muted ? "mute" : "unmute"} size=${14} />
+            </div>
             <${OsIcon} kind="disk" size=${14} />
             <div style="width:12px;height:12px;border-radius:50%;background:radial-gradient(circle at 34% 30%,#fff,#79cf58 55%,#2c7d1c);border:1px solid rgba(255,255,255,0.55);flex:none;"></div>
             <div style="font-size:11.5px;letter-spacing:0.01em;">${st.clock}</div>
