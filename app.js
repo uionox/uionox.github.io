@@ -94,7 +94,7 @@ const PROJECTS = {
     body: "A whole desktop environment in a browser tab: draggable windows, a taskbar, a working command prompt, a file explorer, two games. No page ever navigates away.",
     bullets: ["Window manager: drag, resize, focus order, minimise, maximise.", "A terminal that takes real commands and hides a few jokes.", "Snake and Minesweeper, both actually playable.", "Every icon drawn in CSS — no image assets to load."],
     notice: "You are inside it. The address bar above is decorative; this window is the site showing you itself.",
-    readme: "UIONOX.COM\n==========\n\nWHAT IT IS\nA desktop operating system that runs in a browser tab,\nused as a portfolio. Windows, taskbar, explorer,\nterminal, games.\n\nWHY IT EXISTS\nA CV in a PDF proves you can write a CV. This proves\nsomething harder: state management, interaction detail,\nand restraint. The retro shell is the joke; the window\nmanager underneath it is the point.\n\nRULES IT FOLLOWS\n  1. Nothing navigates away. Everything opens in a window.\n  2. Every icon is CSS. No image requests.\n  3. It has to work on a phone too, so it stops pretending\n     to be draggable there and goes fullscreen instead.\n\nSEE ALSO\nmanifesto.txt on the desktop.\n",
+    readme: "UIONOX.COM\n==========\n\nWHAT IT IS\nA desktop operating system that runs in a browser tab,\nused as a portfolio. Windows, taskbar, explorer,\nterminal, games.\n\nWHY IT EXISTS\nA ad in a PDF proves you can write a CV. This proves\nsomething harder: state management, interaction detail,\nand restraint. The retro shell is the joke; the window\nmanager underneath it is the point.\n\nRULES IT FOLLOWS\n  1. Nothing navigates away. Everything opens in a window.\n  2. Every icon is CSS. No image requests.\n  3. It has to work on a phone too, so it stops pretending\n     to be draggable there and goes fullscreen instead.\n\nSEE ALSO\nmanifesto.txt on the desktop.\n",
     stack: "STACK\n=====\n\nLanguage      JavaScript\nRendering     Component-based, no framework build step\nStyling       Inline styles, CSS gradients only\nAssets        None — every icon is drawn in CSS\nGames         Snake and Minesweeper, hand-written\n",
     changelog: "CHANGELOG\n=========\n\n0.4   Projects became walk-in folders.\n0.3   CSS icon set across every surface.\n0.2   Terminal, Snake, Minesweeper.\n0.1   Window manager, taskbar, start menu.\n"
   }
@@ -1074,7 +1074,7 @@ class App extends Component {
                             <div>${n.label}</div>
                           </div>
                         `)}
-                        <a href="./assets/cv.pdf" download style="display:flex;align-items:center;gap:7px;padding:4px 7px;border-radius:2px;cursor:default;font-size:11.5px;color:#1b4a94;text-decoration:none;margin-top:2px;">
+                        <a href="./assets/Hussein_Moussa_CV.pdf" download style="display:flex;align-items:center;gap:7px;padding:4px 7px;border-radius:2px;cursor:default;font-size:11.5px;color:#1b4a94;text-decoration:none;margin-top:2px;">
                           <${OsIcon} kind="disk" size=${16} />
                           <div>Download CV.pdf</div>
                         </a>
@@ -1335,7 +1335,7 @@ class App extends Component {
                         <div style="font-size:13px;color:#16406f;">${c.v}</div>
                       </div>
                     `)}
-                    <a href="./assets/cv.pdf" download style="display:flex;gap:12px;align-items:center;border:1px solid #e2e5ea;border-radius:5px;padding:11px 13px;background:#fbfcfd;text-decoration:none;">
+                    <a href="./assets/Hussein_Moussa_CV.pdf" download style="display:flex;gap:12px;align-items:center;border:1px solid #e2e5ea;border-radius:5px;padding:11px 13px;background:#fbfcfd;text-decoration:none;">
                       <div style="width:78px;flex:none;font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:#8b93a2;">CV</div>
                       <div style="font-size:13px;color:#16406f;text-decoration:underline;">Download CV.pdf</div>
                     </a>
