@@ -79,11 +79,11 @@ const PROJECTS = {
     tagline: "A Flask inventory system for tracking what a warehouse has, where it is, and who moved it.",
     facts: [{ k: "Stack", v: "Python · Flask · SQL" }, { k: "Type", v: "Internal web application" }, { k: "Status", v: "Private deployment" }],
     body: "IMS is stock-first. Where Suppy answers who asked for what, IMS answers what is actually on the shelf, in which location, and how it got there.",
-    bullets: ["Item, category and location records with running stock levels.", "Movement log — every in, out and transfer is attributable.", "Role-based access so floor staff and coordinators see the right thing.", "Reporting views for low stock and fast-moving items."],
+    bullets: ["Item, category and location records with running stock levels.", "User management — accounts and role-based access for floor staff and coordinators.", "Reporting views for low stock and fast-moving items."],
     notice: "This deployment is private and not exposed to the public internet, so this window shows a written overview instead of the live app.",
     readme: "INVENTORY MANAGEMENT SYSTEM\n===========================\n\nWHAT IT IS\nStock control for a real warehouse: items, quantities,\nlocations, and a movement history that says who moved\nwhat and when.\n\nHOW IT DIFFERS FROM SUPPY\nSuppy is claim-first — it handles requests from people.\nIMS is stock-first — it handles what is on the shelf.\nOne answers 'who asked', the other answers 'what's left'.\n\nWHY IT EXISTS\nSpreadsheet inventory survives a quiet week and fails a\nbusy one. Two people edit the same file, and the count\nis fiction by the afternoon.\n\nWHERE IT RUNS\nims.uionox.com — private, internal use.\n",
     stack: "STACK\n=====\n\nLanguage      Python\nFramework     Flask\nData          SQL (schema designed in-house)\nFrontend      Server-rendered templates\nHosting       Linux VPS, self-administered\n\nNOTE\nExact versions and dependencies live in the repo.\nConnect github.com/uiopler to pull them in here.\n",
-    changelog: "CHANGELOG\n=========\n\n0.3   Reporting views: low stock, fast movers.\n0.2   Movement log and role-based access.\n0.1   Items, locations and stock levels.\n\n(Version notes are summaries — see the repo for commits.)\n"
+    changelog: "CHANGELOG\n=========\n\n0.3   Reporting views: low stock, fast movers.\n0.2   User management and role-based access.\n0.1   Items, locations and stock levels.\n\n(Version notes are summaries — see the repo for commits.)\n"
   },
   site: {
     name: "uionox.com", url: "https://uionox.com", host: "uionox.com",
@@ -101,9 +101,9 @@ const PROJECTS = {
 };
 
 const SCREENS = {
-  suppy: ["claim-form.png", "approvals-queue.png", "camp-list.png"],
-  ims: ["stock-overview.png", "item-detail.png", "movement-log.png"],
-  site: ["desktop.png", "terminal.png", "explorer.png"]
+  suppy: ["dashboard.png", "claim.png", "approval-queue.png"],
+  ims: ["stock.png", "item.png", "user-management.png"],
+  site: ["desktop.png", "menu.png", "terminal.png"]
 };
 
 const MANIFESTO = "UIONOX — MANIFESTO.txt\n" +
@@ -296,7 +296,7 @@ class App extends Component {
       x: Math.max(8, Math.round((maxW - w) / 2 - 90 + n * 26)), y: Math.max(8, Math.round((maxH - h) / 2 - 40 + n * 22)),
       w, h, z, min: false, max: false, project: extra.project || null, loading: !!extra.project,
       folder: extra.folder || (app === "projects" ? "root" : null), text: extra.text || null,
-      shot: extra.shot || null, shotOf: extra.shotOf || null
+      shot: extra.shot || null, shotOf: extra.shotOf || null, shotSrc: extra.shotSrc || null
     };
     this.setState(s => ({ windows: [...s.windows, win], zTop: z, startOpen: false, ctx: null, busy: !!extra.project }));
     if (app === "term" && !this.state.termLines.length) this.bootTerm();
@@ -390,7 +390,7 @@ class App extends Component {
     };
   };
 
-  openShot = (key, name) => this.open("shot_" + key + "_" + name, { id: "shot_" + key + "_" + name, kind: "shot", title: name + " — Image Viewer", w: 520, h: 400, shot: name, shotOf: PROJECTS[key].name });
+  openShot = (key, name) => this.open("shot_" + key + "_" + name, { id: "shot_" + key + "_" + name, kind: "shot", title: name + " — Image Viewer", w: 520, h: 400, shot: name, shotOf: PROJECTS[key].name, shotSrc: "assets/screens/" + key + "/" + name });
 
   openProject = (key) => {
     const p = PROJECTS[key];
@@ -764,7 +764,7 @@ class App extends Component {
         previewStyle: st.wall
           ? { width: "100%", height: "100%", backgroundImage: "url(" + st.wall + ")", backgroundSize: "cover", backgroundPosition: "center" }
           : { width: "100%", height: "100%", background: "linear-gradient(180deg,#1560b8 0%,#3f97e2 34%,#9dd2f2 58%,#e9f2f4 70%,#6fb122 71%,#2f6609 100%)" },
-        shotName: w.shot || "", shotOf: w.shotOf || "",
+        shotName: w.shot || "", shotOf: w.shotOf || "", shotSrc: w.shotSrc || "",
         ready: w.kind === "browser" && !w.loading,
         url: p ? p.url : "", host: p ? p.host : "", kicker: p ? p.kicker : "", name: p ? p.name : "",
         tagline: p ? p.tagline : "", facts: p ? p.facts : [], body: p ? p.body : "", bullets: p ? p.bullets : [], notice: p ? p.notice : "",
@@ -1276,8 +1276,8 @@ class App extends Component {
 
               ${win.isShot && html`
                 <div style="flex:1;min-height:0;display:flex;flex-direction:column;background:#5b5b55;padding:12px;gap:10px;border-top:1px solid #3f3f3a;">
-                  <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;background:repeating-linear-gradient(135deg,#f4f4f0 0 9px,#e4e4de 9px 18px);border:1px solid #2f2f2b;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.6);">
-                    <div style="text-align:center;font-family:'VT323',Consolas,monospace;font-size:16px;color:#55554d;line-height:1.5;padding:16px;">${win.shotName}<div style="font-size:13px;opacity:0.7;">screenshot goes here</div></div>
+                  <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;background:repeating-linear-gradient(135deg,#f4f4f0 0 9px,#e4e4de 9px 18px);border:1px solid #2f2f2b;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.6);overflow:hidden;">
+                    <img src=${win.shotSrc} alt=${win.shotName} style="max-width:100%;max-height:100%;object-fit:contain;" />
                   </div>
                   <div style="display:flex;justify-content:space-between;color:#e8e8e2;font-size:11px;">
                     <div>${win.shotName}</div><div>${win.shotOf}</div>
