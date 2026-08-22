@@ -145,15 +145,21 @@ const APPS = {
   mine:     { title: "Minesweeper", w: 300, h: 360, kind: "mine" },
   sudoku:   { title: "Sudoku", w: 360, h: 560, kind: "sudoku" },
   contact:  { title: "Contact", w: 460, h: 340, kind: "contact" },
+  mail:     { title: "Send Email", w: 500, h: 480, kind: "mail" },
   display:  { title: "Display Properties", w: 400, h: 500, kind: "display" }
 };
 
 const GRID = 20, CELL = 16;
-const SNAKE_SPEED = 115;
 const SUD = 30;
 const WALL_KEY = "uionox_wallpaper";
 const BOOT_KEY = "uionox_booted";
 const SUDOKU_BEST_KEY = "uionox_sudoku_best";
+const SNAKE_BEST_KEY = "uionox_snake_best";
+const SNAKE_SPEEDS = { slow: 160, normal: 115, fast: 80 };
+/* formsubmit.co needs no account — it forwards straight to this address. The very
+   first real submission triggers a one-time confirmation email Hussein has to click. */
+const MAIL_ENDPOINT = "https://formsubmit.co/ajax/hussein.moussa@uionox.com";
+const MAIL_DEFAULT_SUBJECT = "Hello from uionox.com";
 
 /* ============================== app ============================== */
 
@@ -169,11 +175,12 @@ class App extends Component {
     shuttingDown: false, shutDone: false, busy: false,
     mypcSection: "overview", wall: null, wallCleared: false,
     termLines: [], termInput: "", termHist: [], termHistIdx: -1,
-    snake: null, snakeBest: 0, snakeMsg: "Snake", snakeBtn: "Start",
+    snake: null, snakeBest: {}, snakeSpeed: "normal", snakeMsg: "Snake", snakeBtn: "Start",
     mine: null, mineTime: 0, mineFace: ":)", mineStatus: "Left-click reveals · right-click flags",
     sudoku: null, sudokuTimer: 0, sudokuBest: {}, sudokuNotesMode: false,
     muted: isMuted(),
-    mobile: false
+    mobile: false,
+    mailForm: { name: "", email: "", subject: "", message: "" }, mailStatus: "idle", mailErrors: {}
   };
 
   timeNow() {
@@ -195,6 +202,11 @@ class App extends Component {
     try {
       const savedBest = JSON.parse(localStorage.getItem(SUDOKU_BEST_KEY) || "{}");
       this.setState({ sudokuBest: savedBest });
+    } catch (e) {}
+
+    try {
+      const savedSnakeBest = JSON.parse(localStorage.getItem(SNAKE_BEST_KEY) || "{}");
+      this.setState({ snakeBest: savedSnakeBest });
     } catch (e) {}
 
     this.setState({ clock: this.timeNow() });
@@ -427,7 +439,8 @@ class App extends Component {
           "  about        what UIONOX is", "  whoami       the human behind it",
           "  dir | ls     list C:\\UIONOX", "  cat <file>   read a file",
           "  projects     open the projects folder", "  cv           open the CV explorer",
-          "  contact      how to reach me", "  motto        the whole point",
+          "  contact      how to reach me", "  mail         send an email",
+          "  motto        the whole point",
           "  date         today, allegedly", "  echo <text>  say it back",
           "  snake        play snake", "  mines        play minesweeper", "  sudoku       play sudoku",
           "  clear        wipe the screen", "  exit         close this window", "",
@@ -472,6 +485,7 @@ class App extends Component {
       case head === "contact":
         out.push("Email   hussein.moussa@uionox.com", "Phone   +961 78 867 886", "GitHub  github.com/uiopler", "Where   Beirut, Lebanon");
         break;
+      case head === "mail" || head === "email": this.open("mail"); out.push("Opening mail composer…"); break;
       case head === "motto": out.push({ t: "creating what deserves to exist", c: "#7ee08a" }); break;
       case head === "date": out.push(new Date().toString()); break;
       case head === "echo": out.push(cmd.slice(5) || ""); break;
@@ -533,10 +547,11 @@ class App extends Component {
     this.setState({ snake: { body: [{ x: 8, y: 10 }, { x: 7, y: 10 }, { x: 6, y: 10 }], dir: { x: 1, y: 0 }, next: { x: 1, y: 0 }, food: { x: 14, y: 10 }, score: 0, running: false, dead: false }, snakeMsg: "Snake", snakeBtn: "Start" });
   };
   snakeAlive = () => { const s = this.state.snake; return s && s.running; };
+  setSnakeSpeed = (key) => { if (!this.snakeAlive()) this.setState({ snakeSpeed: key }); };
   startSnake = () => {
     clearInterval(this.snakeT);
     this.setState(s => ({ snake: { ...s.snake, body: [{ x: 8, y: 10 }, { x: 7, y: 10 }, { x: 6, y: 10 }], dir: { x: 1, y: 0 }, next: { x: 1, y: 0 }, food: { x: 14, y: 10 }, score: 0, running: true, dead: false } }));
-    this.snakeT = setInterval(this.step, SNAKE_SPEED);
+    this.snakeT = setInterval(this.step, SNAKE_SPEEDS[this.state.snakeSpeed] || SNAKE_SPEEDS.normal);
   };
   turn = (k) => {
     const map = { ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 }, ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 }, w: { x: 0, y: -1 }, s: { x: 0, y: 1 }, a: { x: -1, y: 0 }, d: { x: 1, y: 0 } };
@@ -546,6 +561,15 @@ class App extends Component {
     if (d.x === -cur.x && d.y === -cur.y) return;
     this.setState(s => ({ snake: { ...s.snake, next: d } }));
   };
+  snakeTouchStart = (e) => { const t = e.touches[0]; this._snTouch = { x: t.clientX, y: t.clientY }; };
+  snakeTouchEnd = (e) => {
+    const from = this._snTouch; this._snTouch = null;
+    if (!from || !this.snakeAlive()) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - from.x, dy = t.clientY - from.y;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+    this.turn(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "ArrowRight" : "ArrowLeft") : (dy > 0 ? "ArrowDown" : "ArrowUp"));
+  };
   step = () => {
     this.setState(s => {
       const sn = s.snake; if (!sn || !sn.running) return {};
@@ -553,9 +577,12 @@ class App extends Component {
       const head = { x: sn.body[0].x + dir.x, y: sn.body[0].y + dir.y };
       if (head.x < 0 || head.y < 0 || head.x >= GRID || head.y >= GRID || sn.body.some(b => b.x === head.x && b.y === head.y)) {
         clearInterval(this.snakeT);
-        const best = Math.max(s.snakeBest, sn.score);
-        if (sn.score > 0 && sn.score >= best) sfx.win(); else sfx.gameOver();
-        return { snake: { ...sn, running: false, dead: true }, snakeMsg: "Game over — " + sn.score, snakeBtn: "Play again", snakeBest: best };
+        const key = s.snakeSpeed, prevBest = s.snakeBest[key] || 0;
+        if (sn.score > 0 && sn.score >= prevBest) sfx.win(); else sfx.gameOver();
+        const best = Math.max(prevBest, sn.score);
+        const snakeBest = best !== prevBest ? { ...s.snakeBest, [key]: best } : s.snakeBest;
+        if (best !== prevBest) { try { localStorage.setItem(SNAKE_BEST_KEY, JSON.stringify(snakeBest)); } catch (e) {} }
+        return { snake: { ...sn, running: false, dead: true }, snakeMsg: "Game over — " + sn.score, snakeBtn: "Play again", snakeBest };
       }
       const body = [head, ...sn.body];
       let food = sn.food, score = sn.score;
@@ -682,6 +709,34 @@ class App extends Component {
     });
   };
 
+  /* ---------- mail ---------- */
+  setMailField = (k, v) => this.setState(s => ({ mailForm: { ...s.mailForm, [k]: v }, mailErrors: { ...s.mailErrors, [k]: null } }));
+  validateMail = (f) => {
+    const errors = {};
+    if (!f.name.trim()) errors.name = "Enter your name.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim())) errors.email = "Enter a valid email.";
+    if (!f.message.trim()) errors.message = "Enter a message.";
+    return errors;
+  };
+  submitMail = (e) => {
+    e.preventDefault();
+    const errors = this.validateMail(this.state.mailForm);
+    if (Object.keys(errors).length) { this.setState({ mailErrors: errors }); sfx.error(); return; }
+    this.setState({ mailStatus: "sending", mailErrors: {} });
+    const { name, email, subject, message } = this.state.mailForm;
+    fetch(MAIL_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ name, email, subject: subject.trim() || MAIL_DEFAULT_SUBJECT, message, _template: "table", _captcha: "false" })
+    }).then(res => {
+      if (res.ok) { sfx.win(); this.setState({ mailStatus: "sent", mailForm: { name: "", email: "", subject: "", message: "" } }); }
+      else { sfx.error(); this.setState({ mailStatus: "error" }); }
+    }).catch(() => { sfx.error(); this.setState({ mailStatus: "error" }); });
+  };
+
+  /* ---------- shared UI ---------- */
+  lcdChip = (value, opts = {}) => html`<div style="background:#000;color:#f33;font-family:'VT323',monospace;font-size:${opts.size || 22}px;line-height:1;padding:2px ${opts.pad || 10}px;min-width:${opts.minWidth || 56}px;text-align:center;">${value}</div>`;
+
   /* ---------- shell ---------- */
   doShutdown = () => {
     this.setState({ startOpen: false, shuttingDown: true, shutDone: false });
@@ -748,7 +803,7 @@ class App extends Component {
             ? "0 16px 44px rgba(2,14,44,0.5), 0 2px 8px rgba(2,14,44,0.35), inset 0 0 0 1px rgba(255,255,255,0.28)"
             : "0 8px 22px rgba(2,14,44,0.3), inset 0 0 0 1px rgba(255,255,255,0.2)"
         },
-        iconKind: w.kind === "mypc" ? "mypc" : w.kind,
+        iconKind: w.kind === "mypc" ? "mypc" : (w.kind === "mail" ? "contact" : w.kind),
         titleBarStyle: {
           position: "relative", display: "flex", alignItems: "center", gap: "6px", padding: "0 4px 0 6px",
           height: "28px", flex: "none", color: "#fff", cursor: maxed ? "default" : "move", borderRadius: "6px 6px 0 0",
@@ -760,7 +815,7 @@ class App extends Component {
         resizable: !maxed,
         isBrowser: w.kind === "browser", isMyPC: w.kind === "mypc", isFolder: w.kind === "folder",
         isNote: w.kind === "note", isTerm: w.kind === "term", isSnake: w.kind === "snake",
-        isMine: w.kind === "mine", isSudoku: w.kind === "sudoku", isBin: w.kind === "bin", isContact: w.kind === "contact", isShot: w.kind === "shot", isDisplay: w.kind === "display",
+        isMine: w.kind === "mine", isSudoku: w.kind === "sudoku", isBin: w.kind === "bin", isContact: w.kind === "contact", isMail: w.kind === "mail", isShot: w.kind === "shot", isDisplay: w.kind === "display",
         previewStyle: st.wall
           ? { width: "100%", height: "100%", backgroundImage: "url(" + st.wall + ")", backgroundSize: "cover", backgroundPosition: "center" }
           : { width: "100%", height: "100%", background: "linear-gradient(180deg,#1560b8 0%,#3f97e2 34%,#9dd2f2 58%,#e9f2f4 70%,#6fb122 71%,#2f6609 100%)" },
@@ -905,6 +960,10 @@ class App extends Component {
     const sudokuPad = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => ({ n, onClick: () => this.sudokuInput(n) }));
     const sudokuLevels = [["easy", "Easy"], ["medium", "Medium"], ["hard", "Hard"]].map(([key, label]) => ({
       key, label, best: st.sudokuBest[key] ? fmtTime(st.sudokuBest[key]) : "—", onClick: () => this.startSudoku(key)
+    }));
+
+    const snakeSpeeds = [["slow", "Slow"], ["normal", "Normal"], ["fast", "Fast"]].map(([key, label]) => ({
+      key, label, active: st.snakeSpeed === key, onClick: () => this.setSnakeSpeed(key)
     }));
 
     const contactRows = [
@@ -1166,19 +1225,24 @@ class App extends Component {
                   <div style="display:flex;align-items:center;justify-content:center;gap:16px;padding:6px 14px;background:#c0c0c0;border-top:2px solid #fff;border-left:2px solid #fff;border-right:2px solid #808080;border-bottom:2px solid #808080;">
                     <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
                       <div style="font-size:9px;letter-spacing:0.1em;color:#4a4a44;font-family:Tahoma,Verdana,sans-serif;font-weight:700;">SCORE</div>
-                      <div style="background:#000;color:#f33;font-family:'VT323',monospace;font-size:24px;line-height:1;padding:2px 10px;min-width:56px;text-align:center;">${sn ? sn.score : 0}</div>
+                      ${this.lcdChip(sn ? sn.score : 0, { size: 24 })}
                     </div>
                     <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
                       <div style="font-size:9px;letter-spacing:0.1em;color:#4a4a44;font-family:Tahoma,Verdana,sans-serif;font-weight:700;">BEST</div>
-                      <div style="background:#000;color:#f33;font-family:'VT323',monospace;font-size:24px;line-height:1;padding:2px 10px;min-width:56px;text-align:center;">${st.snakeBest}</div>
+                      ${this.lcdChip(st.snakeBest[st.snakeSpeed] || 0, { size: 24 })}
                     </div>
                   </div>
-                  <div style="position:relative;width:${GRID * CELL}px;height:${GRID * CELL}px;background:#132018;border:3px solid #57614f;flex:none;">
+                  <div style="position:relative;width:${GRID * CELL}px;height:${GRID * CELL}px;background:#132018;border:3px solid #57614f;flex:none;" onTouchStart=${this.snakeTouchStart} onTouchEnd=${this.snakeTouchEnd}>
                     ${snakeParts.map(p => html`<div style=${p.style}></div>`)}
                     ${!(sn && sn.running) && html`
                       <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:rgba(10,20,14,0.82);color:#dfeede;text-align:center;padding:16px;">
                         <div style="font-size:15px;font-weight:700;">${st.snakeMsg}</div>
-                        <div style="font-size:11px;opacity:0.75;line-height:1.6;">Arrow keys or WASD${mob ? "" : ", or the pad below,"} to steer.</div>
+                        <div style="font-size:11px;opacity:0.75;line-height:1.6;">Arrow keys or WASD${mob ? "" : ", or the pad below,"} to steer${mob ? ", or swipe" : ""}.</div>
+                        <div style="display:flex;gap:6px;">
+                          ${snakeSpeeds.map(sp => html`
+                            <div class="hv-bright11" style="padding:4px 10px;border-radius:4px;border:1px solid ${sp.active ? "#4f8a25" : "#7f97c2"};background:${sp.active ? "linear-gradient(180deg,#9ed46d,#4f8a25)" : "linear-gradient(180deg,#fdfdfa,#e4e9f2 55%,#c3cee2)"};color:${sp.active ? "#fff" : "#12233c"};font-weight:700;font-size:10.5px;cursor:default;" onClick=${sp.onClick}>${sp.label}</div>
+                          `)}
+                        </div>
                         <div class="hv-bright11" style="padding:6px 16px;border-radius:4px;border:1px solid #7fae5a;background:linear-gradient(180deg,#9ed46d,#4f8a25);color:#fff;font-weight:700;cursor:default;" onClick=${this.startSnake}>${st.snakeBtn}</div>
                       </div>
                     `}
@@ -1195,9 +1259,9 @@ class App extends Component {
               ${win.isMine && html`
                 <div style="flex:1;min-height:0;overflow:auto;background:#d4d0c8;padding:10px;display:flex;flex-direction:column;align-items:center;gap:9px;">
                   <div style="display:flex;align-items:center;gap:14px;padding:6px 10px;background:#c0c0c0;border-top:2px solid #fff;border-left:2px solid #fff;border-right:2px solid #808080;border-bottom:2px solid #808080;">
-                    <div style="background:#000;color:#f33;font-family:'VT323',monospace;font-size:22px;line-height:1;padding:2px 6px;min-width:48px;text-align:center;">${mineFlagsLeft}</div>
+                    ${this.lcdChip(mineFlagsLeft, { pad: 6, minWidth: 48 })}
                     <div style="width:30px;height:26px;background:linear-gradient(180deg,#f2f2f2,#bdbdbd);border-top:2px solid #fff;border-left:2px solid #fff;border-right:2px solid #808080;border-bottom:2px solid #808080;display:flex;align-items:center;justify-content:center;font-size:14px;cursor:default;" onClick=${this.resetMine}>${st.mineFace}</div>
-                    <div style="background:#000;color:#f33;font-family:'VT323',monospace;font-size:22px;line-height:1;padding:2px 6px;min-width:48px;text-align:center;">${mineTime}</div>
+                    ${this.lcdChip(mineTime, { pad: 6, minWidth: 48 })}
                   </div>
                   <div style="display:grid;grid-template-columns:repeat(9,24px);gap:0;border-top:3px solid #808080;border-left:3px solid #808080;border-right:3px solid #fff;border-bottom:3px solid #fff;">
                     ${mineCells.map(c => html`<div style=${c.style} onClick=${c.onClick} onContextMenu=${c.onFlag}>${c.label}</div>`)}
@@ -1215,11 +1279,11 @@ class App extends Component {
                     </div>
                     <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
                       <div style="font-size:9px;letter-spacing:0.1em;color:#4a4a44;font-family:Tahoma,Verdana,sans-serif;font-weight:700;">TIME</div>
-                      <div style="background:#000;color:#f33;font-family:'VT323',monospace;font-size:22px;line-height:1;padding:2px 10px;min-width:64px;text-align:center;">${fmtTime(st.sudokuTimer)}</div>
+                      ${this.lcdChip(fmtTime(st.sudokuTimer), { minWidth: 64 })}
                     </div>
                     <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
                       <div style="font-size:9px;letter-spacing:0.1em;color:#4a4a44;font-family:Tahoma,Verdana,sans-serif;font-weight:700;">MISTAKES</div>
-                      <div style="background:#000;color:#f33;font-family:'VT323',monospace;font-size:22px;line-height:1;padding:2px 10px;min-width:44px;text-align:center;">${sd ? sd.mistakes : 0}</div>
+                      ${this.lcdChip(sd ? sd.mistakes : 0, { minWidth: 44 })}
                     </div>
                   </div>
                   <div style="position:relative;display:grid;grid-template-columns:repeat(9,${SUD}px);grid-template-rows:repeat(9,${SUD}px);width:${SUD * 9}px;height:${SUD * 9}px;background:#fff;border:2px solid #33405a;flex:none;">
@@ -1243,7 +1307,7 @@ class App extends Component {
                           ${sudokuLevels.map(lv => html`
                             <div class="hv-bright11" style="display:flex;align-items:center;justify-content:space-between;padding:9px 14px;border-radius:5px;border:1px solid #7f97c2;background:linear-gradient(180deg,#fdfdfa,#e4e9f2 55%,#c3cee2);box-shadow:inset 0 1px 0 rgba(255,255,255,0.7),0 2px 4px rgba(20,40,80,0.18);cursor:default;" onClick=${lv.onClick}>
                               <span style="font-weight:700;font-size:13px;color:#12233c;font-family:Tahoma,Verdana,sans-serif;">${lv.label}</span>
-                              <span style="background:#000;color:#f33;font-family:'VT323',monospace;font-size:14px;padding:1px 8px;border-radius:2px;min-width:44px;text-align:center;">${lv.best}</span>
+                              ${this.lcdChip(lv.best, { size: 14, pad: 8, minWidth: 44 })}
                             </div>
                           `)}
                         </div>
@@ -1328,7 +1392,7 @@ class App extends Component {
                 <div style="flex:1;overflow:auto;background:#fff;padding:24px 26px;">
                   <div style="font-size:17px;font-weight:700;color:#1a3c7d;margin-bottom:4px;">Hussein Moussa</div>
                   <div style="font-size:12px;color:#6a7484;margin-bottom:20px;">MIS student · IT support & systems · Beirut, Lebanon</div>
-                  <div style="display:flex;flex-direction:column;gap:10px;max-width:420px;">
+                  <div style="display:flex;flex-direction:column;gap:10px;">
                     ${contactRows.map(c => html`
                       <div style="display:flex;gap:12px;align-items:center;border:1px solid #e2e5ea;border-radius:5px;padding:11px 13px;background:#fbfcfd;">
                         <div style="width:78px;flex:none;font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:#8b93a2;">${c.k}</div>
@@ -1339,8 +1403,53 @@ class App extends Component {
                       <div style="width:78px;flex:none;font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:#8b93a2;">CV</div>
                       <div style="font-size:13px;color:#16406f;text-decoration:underline;">Download CV.pdf</div>
                     </a>
+                    <div class="hv-bright11" style="display:flex;gap:12px;align-items:center;justify-content:center;border-radius:5px;padding:11px 13px;background:linear-gradient(180deg,#9ed46d,#4f8a25);color:#fff;font-weight:700;font-size:13px;cursor:default;" onClick=${() => this.open("mail")}>Send a message</div>
                   </div>
                 </div>
+              `}
+
+              ${win.isMail && html`
+                <form onSubmit=${this.submitMail} style="flex:1;min-height:0;display:flex;flex-direction:column;">
+                  <div style="display:flex;gap:13px;padding:3px 9px;background:linear-gradient(180deg,#fdfdfa,#f0eee2 60%,#e6e3d4);border-bottom:1px solid #b9b49f;box-shadow:inset 0 1px 0 #fff;color:#1b1b17;flex:none;">
+                    <span>File</span><span>Edit</span><span>View</span><span>Insert</span><span>Format</span><span>Tools</span><span>Help</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:10px;padding:5px 9px;background:linear-gradient(180deg,#fdfdfa,#efedde 55%,#e2dfcf);border-bottom:1px solid #b9b49f;box-shadow:inset 0 1px 0 #fff;flex:none;">
+                    <button type="submit" disabled=${st.mailStatus === "sending"} class="hv-blue-dbe7fa" style="display:flex;align-items:center;gap:6px;height:27px;padding:0 12px;border-radius:3px;border:1px solid #b9b4a2;background:linear-gradient(180deg,#fff,#e2dece);cursor:default;font-family:Tahoma,Verdana,sans-serif;font-size:11.5px;color:#12233c;font-weight:700;opacity:${st.mailStatus === "sending" ? 0.6 : 1};">
+                      <svg width="15" height="15" viewBox="0 0 24 24"><path d="M3 11 L21 3 L14 21 L11 13 L3 11 Z" fill="#2b6fd4" stroke="#123f7a" stroke-width="1"/></svg>
+                      ${st.mailStatus === "sending" ? "Sending…" : "Send"}
+                    </button>
+                    <div style="width:1px;height:18px;background:#c9c4b2;"></div>
+                    <div style="display:flex;gap:12px;font-size:11px;color:#9a9484;">
+                      <span>Cut</span><span>Copy</span><span>Paste</span><span>Undo</span>
+                    </div>
+                  </div>
+                  <div style="padding:8px 12px;border-bottom:1px solid #dcd8c8;background:#fbfcfd;flex:none;">
+                    <div style="display:flex;align-items:center;gap:8px;padding:3px 0;">
+                      <div style="width:52px;flex:none;font-size:11px;color:#7a8494;">To:</div>
+                      <div style="font-size:12px;color:#16406f;">Hussein Moussa — hussein.moussa@uionox.com</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;padding:3px 0;border-top:1px solid #eceade;">
+                      <div style="width:52px;flex:none;font-size:11px;color:#7a8494;">From:</div>
+                      <input type="email" placeholder="your@email.com" value=${st.mailForm.email} onInput=${(e) => this.setMailField("email", e.target.value)} style="flex:1;min-width:0;border:1px solid ${st.mailErrors.email ? "#c31414" : "transparent"};border-radius:2px;padding:2px 4px;font-family:Tahoma,Verdana,sans-serif;font-size:12px;background:transparent;" />
+                      <input placeholder="your name" value=${st.mailForm.name} onInput=${(e) => this.setMailField("name", e.target.value)} style="width:140px;flex:none;border:1px solid ${st.mailErrors.name ? "#c31414" : "transparent"};border-radius:2px;padding:2px 4px;font-family:Tahoma,Verdana,sans-serif;font-size:12px;background:transparent;" />
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;padding:3px 0;border-top:1px solid #eceade;">
+                      <div style="width:52px;flex:none;font-size:11px;color:#7a8494;">Subject:</div>
+                      <input placeholder=${MAIL_DEFAULT_SUBJECT} value=${st.mailForm.subject} onInput=${(e) => this.setMailField("subject", e.target.value)} style="flex:1;border:1px solid transparent;border-radius:2px;padding:2px 4px;font-family:Tahoma,Verdana,sans-serif;font-size:12px;background:transparent;" />
+                    </div>
+                    ${(st.mailErrors.name || st.mailErrors.email) && html`<div style="font-size:10.5px;color:#c31414;padding-top:2px;">${st.mailErrors.email || st.mailErrors.name}</div>`}
+                  </div>
+                  <textarea placeholder="Write your message here…" value=${st.mailForm.message} onInput=${(e) => this.setMailField("message", e.target.value)} style="flex:1;min-height:0;width:100%;box-sizing:border-box;border:0;outline:0;resize:none;padding:14px 16px;font-family:'Courier New',monospace;font-size:13px;line-height:1.6;color:#111;border-top:${st.mailErrors.message ? "2px solid #c31414" : "1px solid transparent"};"></textarea>
+                  <div style="display:flex;background:linear-gradient(180deg,#fbfaf3,#e7e4d5);border-top:1px solid #b9b49f;box-shadow:inset 0 1px 0 #fff;padding:3px 9px;font-size:11px;color:#33332c;gap:10px;flex:none;">
+                    <div style="flex:1;">
+                      ${st.mailStatus === "idle" && (st.mailErrors.message ? st.mailErrors.message : "Ready.")}
+                      ${st.mailStatus === "sending" && "Sending…"}
+                      ${st.mailStatus === "sent" && "Message sent."}
+                      ${st.mailStatus === "error" && "Send failed — check your connection and try again."}
+                    </div>
+                    <div style="border-left:1px solid #b9b49f;padding-left:10px;">Internet</div>
+                  </div>
+                </form>
               `}
 
               ${win.resizable && html`
