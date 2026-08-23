@@ -144,7 +144,7 @@ const APPS = {
   snake:    { title: "Snake", w: 380, h: 440, kind: "snake" },
   mine:     { title: "Minesweeper", w: 300, h: 360, kind: "mine" },
   sudoku:   { title: "Sudoku", w: 360, h: 560, kind: "sudoku" },
-  contact:  { title: "Contact", w: 460, h: 340, kind: "contact" },
+  contact:  { title: "Contact", w: 460, h: 460, kind: "contact" },
   mail:     { title: "Send Email", w: 500, h: 480, kind: "mail" },
   display:  { title: "Display Properties", w: 400, h: 500, kind: "display" }
 };
@@ -1409,45 +1409,60 @@ class App extends Component {
               `}
 
               ${win.isMail && html`
-                <form onSubmit=${this.submitMail} style="flex:1;min-height:0;display:flex;flex-direction:column;">
-                  <div style="display:flex;gap:13px;padding:3px 9px;background:linear-gradient(180deg,#fdfdfa,#f0eee2 60%,#e6e3d4);border-bottom:1px solid #b9b49f;box-shadow:inset 0 1px 0 #fff;color:#1b1b17;flex:none;">
-                    <span>File</span><span>Edit</span><span>View</span><span>Insert</span><span>Format</span><span>Tools</span><span>Help</span>
-                  </div>
-                  <div style="display:flex;align-items:center;gap:10px;padding:5px 9px;background:linear-gradient(180deg,#fdfdfa,#efedde 55%,#e2dfcf);border-bottom:1px solid #b9b49f;box-shadow:inset 0 1px 0 #fff;flex:none;">
-                    <button type="submit" disabled=${st.mailStatus === "sending"} class="hv-blue-dbe7fa" style="display:flex;align-items:center;gap:6px;height:27px;padding:0 12px;border-radius:3px;border:1px solid #b9b4a2;background:linear-gradient(180deg,#fff,#e2dece);cursor:default;font-family:Tahoma,Verdana,sans-serif;font-size:11.5px;color:#12233c;font-weight:700;opacity:${st.mailStatus === "sending" ? 0.6 : 1};">
-                      <svg width="15" height="15" viewBox="0 0 24 24"><path d="M3 11 L21 3 L14 21 L11 13 L3 11 Z" fill="#2b6fd4" stroke="#123f7a" stroke-width="1"/></svg>
-                      ${st.mailStatus === "sending" ? "Sending…" : "Send"}
+                <form onSubmit=${this.submitMail} style="flex:1;min-height:0;display:flex;flex-direction:column;padding:8px;background:repeating-linear-gradient(-45deg,#c31d3f 0 7px,#f8f4e6 7px 14px,#1c4fb6 14px 21px,#f8f4e6 21px 28px);">
+                  <div style="position:relative;flex:1;min-height:0;display:flex;flex-direction:column;background:#f8f4e6;box-shadow:0 1px 4px rgba(20,15,5,0.3);">
+
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:11px 78px 8px 14px;border-bottom:1px dashed #cbc0a0;flex:none;">
+                      <div style="display:flex;align-items:center;gap:6px;color:#b0203c;font-size:11px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;font-style:italic;">
+                        <svg width="13" height="13" viewBox="0 0 24 24"><path d="M3 11 L21 3 L14 21 L11 13 L3 11 Z" fill="#b0203c"/></svg>
+                        Par Avion
+                      </div>
+                      <div style="font-size:10px;color:#9a9484;font-style:italic;">uionox.com</div>
+                    </div>
+
+                    <button type="submit" disabled=${st.mailStatus === "sending"} class=${st.mailStatus !== "sent" ? "hv-bright11" : ""} style="position:absolute;top:9px;right:10px;width:56px;height:66px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border:2px dashed #dfe6f2;border-radius:2px;background:radial-gradient(circle at 34% 26%,#8fc0f4,#2b6fd4 55%,#123f7a 100%);box-shadow:0 1px 3px rgba(10,20,50,0.4);cursor:default;opacity:${st.mailStatus === "sending" ? 0.6 : 1};">
+                      <svg width="20" height="20" viewBox="0 0 24 24"><path d="M3 11 L21 3 L14 21 L11 13 L3 11 Z" fill="#fff" stroke="#123f7a" stroke-width="1"/></svg>
+                      <span style="font-size:9.5px;font-weight:700;letter-spacing:0.08em;color:#fff;text-shadow:0 1px 1px rgba(0,10,40,0.5);">${st.mailStatus === "sending" ? "…" : "SEND"}</span>
+                      ${st.mailStatus === "sent" && html`
+                        <div style="position:absolute;inset:-6px;display:flex;align-items:center;justify-content:center;transform:rotate(-14deg);animation:uxstamp 0.4s ease-out;">
+                          <div style="width:100%;height:100%;border:2px solid rgba(30,40,30,0.55);border-radius:50%;display:flex;align-items:center;justify-content:center;">
+                            <span style="font-size:9px;font-weight:700;letter-spacing:0.06em;color:rgba(30,40,30,0.65);">SENT</span>
+                          </div>
+                        </div>
+                      `}
                     </button>
-                    <div style="width:1px;height:18px;background:#c9c4b2;"></div>
-                    <div style="display:flex;gap:12px;font-size:11px;color:#9a9484;">
-                      <span>Cut</span><span>Copy</span><span>Paste</span><span>Undo</span>
+
+                    <div style="padding:12px 14px 10px;border-bottom:1px dashed #cbc0a0;flex:none;">
+                      <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#8b8266;margin-bottom:3px;">To</div>
+                      <div style="font-size:13.5px;color:#1b2a41;font-family:'Courier New',monospace;">Hussein Moussa — hussein.moussa@uionox.com</div>
                     </div>
-                  </div>
-                  <div style="padding:8px 12px;border-bottom:1px solid #dcd8c8;background:#fbfcfd;flex:none;">
-                    <div style="display:flex;align-items:center;gap:8px;padding:3px 0;">
-                      <div style="width:52px;flex:none;font-size:11px;color:#7a8494;">To:</div>
-                      <div style="font-size:12px;color:#16406f;">Hussein Moussa — hussein.moussa@uionox.com</div>
+
+                    <div style="display:flex;flex-wrap:wrap;gap:10px 16px;padding:10px 14px;border-bottom:1px dashed #cbc0a0;flex:none;">
+                      <div style="display:flex;align-items:baseline;gap:6px;flex:1;min-width:160px;">
+                        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#8b8266;flex:none;">From</div>
+                        <input type="email" placeholder="your@email.com" value=${st.mailForm.email} onInput=${(e) => this.setMailField("email", e.target.value)} style="flex:1;min-width:0;border:0;border-bottom:1px dotted ${st.mailErrors.email ? "#c31414" : "#b8ac82"};outline:0;padding:2px 2px;font-family:'Courier New',monospace;font-size:12.5px;color:#1b2a41;background:transparent;" />
+                      </div>
+                      <div style="display:flex;align-items:baseline;gap:6px;">
+                        <input placeholder="your name" value=${st.mailForm.name} onInput=${(e) => this.setMailField("name", e.target.value)} style="width:130px;border:0;border-bottom:1px dotted ${st.mailErrors.name ? "#c31414" : "#b8ac82"};outline:0;padding:2px 2px;font-family:'Courier New',monospace;font-size:12.5px;color:#1b2a41;background:transparent;" />
+                      </div>
+                      <div style="display:flex;align-items:baseline;gap:6px;flex:1;min-width:200px;">
+                        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#8b8266;flex:none;">Re</div>
+                        <input placeholder=${MAIL_DEFAULT_SUBJECT} value=${st.mailForm.subject} onInput=${(e) => this.setMailField("subject", e.target.value)} style="flex:1;border:0;border-bottom:1px dotted #b8ac82;outline:0;padding:2px 2px;font-family:'Courier New',monospace;font-size:12.5px;color:#1b2a41;background:transparent;" />
+                      </div>
+                      ${(st.mailErrors.name || st.mailErrors.email) && html`<div style="width:100%;font-size:10.5px;color:#c31414;">${st.mailErrors.email || st.mailErrors.name}</div>`}
                     </div>
-                    <div style="display:flex;align-items:center;gap:8px;padding:3px 0;border-top:1px solid #eceade;">
-                      <div style="width:52px;flex:none;font-size:11px;color:#7a8494;">From:</div>
-                      <input type="email" placeholder="your@email.com" value=${st.mailForm.email} onInput=${(e) => this.setMailField("email", e.target.value)} style="flex:1;min-width:0;border:1px solid ${st.mailErrors.email ? "#c31414" : "transparent"};border-radius:2px;padding:2px 4px;font-family:Tahoma,Verdana,sans-serif;font-size:12px;background:transparent;" />
-                      <input placeholder="your name" value=${st.mailForm.name} onInput=${(e) => this.setMailField("name", e.target.value)} style="width:140px;flex:none;border:1px solid ${st.mailErrors.name ? "#c31414" : "transparent"};border-radius:2px;padding:2px 4px;font-family:Tahoma,Verdana,sans-serif;font-size:12px;background:transparent;" />
+
+                    <textarea placeholder="Write your message here…" value=${st.mailForm.message} onInput=${(e) => this.setMailField("message", e.target.value)} style="flex:1;min-height:0;width:100%;box-sizing:border-box;border:0;outline:0;resize:none;padding:16px 18px 16px 14px;font-family:'Courier New',monospace;font-size:13px;line-height:26px;color:#1b2a41;background-color:${st.mailErrors.message ? "#fbeeee" : "transparent"};background-image:linear-gradient(90deg,transparent 6px,#e2a3ad 6px,#e2a3ad 7px,transparent 7px),repeating-linear-gradient(to bottom,transparent 0 25px,#c9d6ea 25px 26px);background-position:0 0,0 16px;"></textarea>
+
+                    <div style="display:flex;background:linear-gradient(180deg,#f2eddc,#e7e0c9);border-top:1px dashed #cbc0a0;padding:4px 12px;font-size:11px;color:#5c5540;font-style:italic;gap:10px;flex:none;">
+                      <div style="flex:1;">
+                        ${st.mailStatus === "idle" && (st.mailErrors.message ? st.mailErrors.message : "Ready to send.")}
+                        ${st.mailStatus === "sending" && "Sending…"}
+                        ${st.mailStatus === "sent" && "Message sent — merci!"}
+                        ${st.mailStatus === "error" && "Send failed — check your connection and try again."}
+                      </div>
+                      <div style="border-left:1px solid #cbc0a0;padding-left:10px;letter-spacing:0.1em;text-transform:uppercase;">Air Mail</div>
                     </div>
-                    <div style="display:flex;align-items:center;gap:8px;padding:3px 0;border-top:1px solid #eceade;">
-                      <div style="width:52px;flex:none;font-size:11px;color:#7a8494;">Subject:</div>
-                      <input placeholder=${MAIL_DEFAULT_SUBJECT} value=${st.mailForm.subject} onInput=${(e) => this.setMailField("subject", e.target.value)} style="flex:1;border:1px solid transparent;border-radius:2px;padding:2px 4px;font-family:Tahoma,Verdana,sans-serif;font-size:12px;background:transparent;" />
-                    </div>
-                    ${(st.mailErrors.name || st.mailErrors.email) && html`<div style="font-size:10.5px;color:#c31414;padding-top:2px;">${st.mailErrors.email || st.mailErrors.name}</div>`}
-                  </div>
-                  <textarea placeholder="Write your message here…" value=${st.mailForm.message} onInput=${(e) => this.setMailField("message", e.target.value)} style="flex:1;min-height:0;width:100%;box-sizing:border-box;border:0;outline:0;resize:none;padding:14px 16px;font-family:'Courier New',monospace;font-size:13px;line-height:1.6;color:#111;border-top:${st.mailErrors.message ? "2px solid #c31414" : "1px solid transparent"};"></textarea>
-                  <div style="display:flex;background:linear-gradient(180deg,#fbfaf3,#e7e4d5);border-top:1px solid #b9b49f;box-shadow:inset 0 1px 0 #fff;padding:3px 9px;font-size:11px;color:#33332c;gap:10px;flex:none;">
-                    <div style="flex:1;">
-                      ${st.mailStatus === "idle" && (st.mailErrors.message ? st.mailErrors.message : "Ready.")}
-                      ${st.mailStatus === "sending" && "Sending…"}
-                      ${st.mailStatus === "sent" && "Message sent."}
-                      ${st.mailStatus === "error" && "Send failed — check your connection and try again."}
-                    </div>
-                    <div style="border-left:1px solid #b9b49f;padding-left:10px;">Internet</div>
                   </div>
                 </form>
               `}
